@@ -17,6 +17,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.example.testapp.MainActivity
 import com.example.testapp.R
+import java.util.Date
 
 class AlarmReceiver : BroadcastReceiver() {
     companion object {
@@ -27,30 +28,38 @@ class AlarmReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        val id = intent.getIntExtra("alarm_id", -1)
+        val time = intent.getLongExtra("trigger_time", 0L)
+
+        Log.d(TAG, "Alarm triggered. ID: $id, Time: ${Date(time)}")
+
         Log.d(TAG, "onReceive called with action: ${intent.action}")
         if (intent.action == ALARM_ACTION) {
             Log.d(TAG, "Alarm action received, showing notification")
-            showNotification(context)
+            showNotification(context, id)
             playAlarmSound(context)
         }
     }
 
-    private fun showNotification(context: Context) {
+    private fun showNotification(context: Context, alarmId: Int) {
         Log.d(TAG, "showNotification started")
         createNotificationChannel(context)
 
         val notificationIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
-        val pendingIntent: PendingIntent = PendingIntent.getActivity(
-            context, 0, notificationIntent,
+
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            alarmId, // Unique again
+            notificationIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground) // Replace with your icon
-            .setContentTitle("Timer Expired!")
-            .setContentText("Your timer has finished.")
+            .setContentTitle("Timer $alarmId Expired")
+            .setContentText("Alarm #$alarmId has finished.")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
@@ -70,7 +79,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 // for ActivityCompat#requestPermissions for more details.
                 return
             }
-            notify(NOTIFICATION_ID, builder.build())
+            notify(alarmId, builder.build())
             Log.d(TAG, "Notification sent")
         }
     }

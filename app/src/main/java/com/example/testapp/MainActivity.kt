@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -23,6 +24,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TimePicker
+import androidx.compose.material3.TimePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -63,10 +65,6 @@ fun TimerScreen(modifier: Modifier = Modifier) {
         TimePicker(state = state)
 
         Button(onClick = {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                requestNotificationPermission(context as Activity)
-            }
-
             val calendar = Calendar.getInstance().apply {
                 set(Calendar.HOUR_OF_DAY, state.hour)
                 set(Calendar.MINUTE, state.minute)
@@ -76,15 +74,46 @@ fun TimerScreen(modifier: Modifier = Modifier) {
             if (calendar.timeInMillis <= System.currentTimeMillis()) {
                 calendar.add(Calendar.DATE, 1)
             }
-
-            scheduleAlarm(context, calendar.timeInMillis)
+            setAlarm(context, calendar, 1001)
         }, modifier = Modifier.padding(16.dp)) {
-            Text("Set Timer")
+            Text("Set Timer 1")
+        }
+
+        Button(onClick = {
+            val calendar = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, state.hour)
+                set(Calendar.MINUTE, state.minute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            if (calendar.timeInMillis <= System.currentTimeMillis()) {
+                calendar.add(Calendar.DATE, 1)
+            }
+            setAlarm(context, calendar, 1002)
+        }, modifier = Modifier.padding(16.dp)) {
+            Text("Set Timer 2")
         }
     }
 }
 
-private fun scheduleAlarm(context: Context, seconds: Long) {
+private fun setAlarm(context: Context, calendar: Calendar, id: Int) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        requestNotificationPermission(context as Activity)
+    }
+
+    if (context.canScheduleExactAlarms()) {
+        scheduleAlarm(context, calendar.timeInMillis, id)
+    } else {
+        Toast.makeText(context, "Permission needed to schedule exact alarms", Toast.LENGTH_LONG).show()
+        // Optional: redirect user to settings to enable permission
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+            context.startActivity(intent)
+        }
+    }
+}
+
+/*private fun scheduleAlarm(context: Context, seconds: Long) {
     val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
     val intent = Intent(context, AlarmReceiver::class.java).apply {
         action = AlarmReceiver.ALARM_ACTION
@@ -109,7 +138,31 @@ private fun scheduleAlarm(context: Context, seconds: Long) {
     )
 
     Toast.makeText(context, "Timer set for $seconds seconds", Toast.LENGTH_SHORT).show()
+}*/
+private fun scheduleAlarm(context: Context, triggerAtMillis: Long, requestCode: Int) {
+    val intent = Intent(context, AlarmReceiver::class.java).apply {
+        action = AlarmReceiver.ALARM_ACTION
+        putExtra("alarm_id", requestCode)
+        putExtra("trigger_time", triggerAtMillis)
+    }
+
+    val pendingIntent = PendingIntent.getBroadcast(
+        context,
+        requestCode, // 👈 Important: Unique request code for each alarm
+        intent,
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+    )
+
+    val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    alarmManager.setExactAndAllowWhileIdle(
+        AlarmManager.RTC_WAKEUP,
+        triggerAtMillis,
+        pendingIntent
+    )
+
+    Toast.makeText(context, "Alarm set for request code: $requestCode", Toast.LENGTH_SHORT).show()
 }
+
 
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 private fun requestNotificationPermission(activity: Activity) {
